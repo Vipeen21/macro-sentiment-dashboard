@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: macro-sentiment-dashboard
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn macro_sentiment_project.wsgi:application"
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "macro-sentiment-dashboard.onrender.com,localhost,127.0.0.1"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: GOOGLE_GENAI_CHAT_MODEL
+        value: "gemini-2.5-flash"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SESSION_COOKIE_SECURE
+        value: "True"
+      - key: DJANGO_CSRF_COOKIE_SECURE
+        value: "True"
+      - key: DJANGO_SECURE_HSTS_SECONDS
+        value: "31536000"

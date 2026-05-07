@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Macro-Sentiment Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        main {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 32px 20px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            margin: 0 0 24px;
+            color: #5b6472;
+        }
+
+        .chart-shell {
+            background: #ffffff;
+            border: 1px solid #d9e0ea;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 20px;
+        }
+
+        #correlationChart {
+            width: 100%;
+            height: 680px;
+        }
+
+        .empty-state {
+            display: none;
+            padding: 48px 16px;
+            text-align: center;
+            color: #5b6472;
+        }
+
+        .panel {
+            background: #ffffff;
+            border: 1px solid #d9e0ea;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 20px;
+        }
+
+        .panel h2 {
+            margin: 0 0 12px;
+            font-size: 18px;
+        }
+
+        .policy-meta {
+            display: grid;
+            gap: 8px;
+            color: #374151;
+        }
+
+        .policy-meta a {
+            color: #0f766e;
+        }
+
+        form {
+            display: grid;
+            gap: 12px;
+        }
+
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+            border: 1px solid #c9d3df;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font: inherit;
+        }
+
+        button {
+            justify-self: start;
+            border: 0;
+            border-radius: 6px;
+            background: #0f766e;
+            color: #ffffff;
+            padding: 10px 16px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .answer {
+            white-space: pre-wrap;
+            color: #1f2937;
+            line-height: 1.55;
+        }
+
+        .answer-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #c9d3df;
+            border-radius: 999px;
+            padding: 5px 10px;
+            margin: 14px 0 10px;
+            color: #374151;
+            background: #f8fafc;
+            font-size: 13px;
+        }
+
+        .answer-meta[data-source^="gemini"] {
+            border-color: #99d4c8;
+            background: #ecfdf8;
+            color: #075e54;
+        }
+
+        .answer-meta[data-source="parser"] {
+            border-color: #c7d2fe;
+            background: #eef2ff;
+            color: #3730a3;
+        }
+
+        .chart-note {
+            color: #5b6472;
+            font-size: 14px;
+            margin: 0 0 12px;
+        }
+
+        .mini-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+
+        .mini-table th,
+        .mini-table td {
+            border-top: 1px solid #e5ebf3;
+            padding: 9px 8px;
+            text-align: left;
+        }
+
+        .mini-table th {
+            color: #4b5563;
+            font-weight: 700;
+        }
+
+        @media (max-width: 700px) {
+            main {
+                padding: 24px 12px;
+            }
+
+            #correlationChart {
+                height: 480px;
+            }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Macro-Sentiment Dashboard</h1>
+    <p class="subtitle">Policy sentiment compared with live USD-INR exchange-rate volatility.</p>
+
+    <section class="panel">
+        <h2>Latest RBI Policy Document</h2>
+        {% if latest_document %}
+            <div class="policy-meta">
+                <div><strong>{{ latest_document.title }}</strong></div>
+                <div>Published: {{ latest_document.published_date|date:"M d, Y" }}</div>
+                {% if latest_document.sentiment %}
+                    <div>
+                        Sentiment: {{ latest_document.sentiment.label }}
+                        ({{ latest_document.sentiment.sentiment_score|floatformat:2 }})
+                    </div>
+                    <div>Primary impact: {{ latest_document.sentiment.primary_impact }}</div>
+                {% endif %}
+                {% if latest_document.source %}
+                    <div><a href="{{ latest_document.source }}" target="_blank" rel="noopener">Open source</a></div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="empty-state" style="display:block;">No latest RBI policy document has been ingested yet.</div>
+        {% endif %}
+    </section>
+
+    <section class="chart-shell">
+        <p class="chart-note">Last five years of MPC meetings with live USD-INR 20-day annualized volatility from market data.</p>
+        <div id="correlationChart"></div>
+        <div id="emptyState" class="empty-state">No chart data is available yet.</div>
+    </section>
+
+    <section class="panel">
+        <h2>Ask The Latest RBI Policy</h2>
+        <form method="post">
+            {% csrf_token %}
+            <textarea name="question" placeholder="Ask about repo rate, inflation outlook, growth projections, stance..." required>{{ question }}</textarea>
+            <button type="submit">Ask</button>
+        </form>
+        {% if answer %}
+            <hr>
+            <div class="answer-meta" data-source="{{ answer_source_type }}">
+                {{ answer_source_label }}
+                {% if answer_model %}<span>{{ answer_model }}</span>{% endif %}
+            </div>
+            <div class="answer">{{ answer }}</div>
+        {% endif %}
+    </section>
+</main>
+
+<script type="application/json" id="sentiment-dates">{{ sentiment_dates|default:"[]"|safe }}</script>
+<script type="application/json" id="sentiment-scores">{{ sentiment_scores|default:"[]"|safe }}</script>
+<script type="application/json" id="policy-rates">{{ policy_rates|default:"[]"|safe }}</script>
+<script type="application/json" id="meeting-titles">{{ meeting_titles|default:"[]"|safe }}</script>
+<script type="application/json" id="indicator-dates">{{ indicator_dates|default:"[]"|safe }}</script>
+<script type="application/json" id="indicator-values">{{ indicator_values|default:"[]"|safe }}</script>
+<script type="application/json" id="indicator-unit">{{ indicator_unit_json|default:'"value"'|safe }}</script>
+
+<script>
+    function readJsonScript(id, fallback) {
+        const element = document.getElementById(id);
+        if (!element) {
+            return fallback;
+        }
+
+        try {
+            const value = JSON.parse(element.textContent);
+            return typeof value === "string" && value.startsWith("[")
+                ? JSON.parse(value)
+                : value;
+        } catch (error) {
+            return fallback;
+        }
+    }
+
+    const sentimentDates = readJsonScript("sentiment-dates", []);
+    const sentimentScores = readJsonScript("sentiment-scores", []);
+    const policyRates = readJsonScript("policy-rates", []);
+    const meetingTitles = readJsonScript("meeting-titles", []);
+    const indicatorDates = readJsonScript("indicator-dates", []);
+    const indicatorValues = readJsonScript("indicator-values", []);
+    const indicatorUnit = readJsonScript("indicator-unit", "value");
+
+    const hasData = sentimentDates.length || indicatorDates.length;
+    const chart = document.getElementById("correlationChart");
+    const emptyState = document.getElementById("emptyState");
+
+    if (!window.Plotly) {
+        chart.style.display = "none";
+        emptyState.textContent = "Plotly could not load. Check your internet connection or serve Plotly locally.";
+        emptyState.style.display = "block";
+    } else if (!hasData) {
+        chart.style.display = "none";
+        emptyState.style.display = "block";
+    } else {
+        const sentimentTrace = {
+            x: sentimentDates,
+            y: sentimentScores,
+            name: "LLM Sentiment",
+            type: "scatter",
+            mode: "lines+markers",
+            customdata: meetingTitles,
+            hovertemplate: "%{customdata}<br>%{x}<br>Sentiment: %{y:.2f}<extra></extra>",
+            textposition: "top center",
+            line: {shape: "spline", color: "#0f766e", width: 3},
+            marker: {
+                size: 9,
+                color: "#0f766e",
+                line: {color: "#ffffff", width: 2}
+            }
+        };
+
+        const policyRateTrace = {
+            x: sentimentDates,
+            y: policyRates,
+            name: "Policy Repo Rate",
+            yaxis: "y2",
+            type: "scatter",
+            mode: "lines+markers+text",
+            text: policyRates.map(rate => rate === null ? "" : `${rate.toFixed(2)}%`),
+            textposition: "bottom center",
+            customdata: meetingTitles,
+            hovertemplate: "%{customdata}<br>%{x}<br>Repo rate: %{y:.2f}%<extra></extra>",
+            line: {shape: "hv", color: "#2563eb", width: 3},
+            marker: {
+                size: 8,
+                color: "#2563eb",
+                line: {color: "#ffffff", width: 2}
+            }
+        };
+
+        const indicatorTrace = {
+            x: indicatorDates,
+            y: indicatorValues,
+            name: `USD-INR Volatility (${indicatorUnit})`,
+            yaxis: "y3",
+            type: "scatter",
+            mode: "lines",
+            fill: "tozeroy",
+            opacity: 0.5,
+            line: {color: "rgba(234, 88, 12, 0.9)", width: 1.5},
+            fillcolor: "rgba(234, 88, 12, 0.16)",
+            hovertemplate: "%{x}<br>USD-INR vol: %{y:.2f}<extra></extra>"
+        };
+
+        const traces = [];
+        if (sentimentDates.length) {
+            traces.push(sentimentTrace);
+            traces.push(policyRateTrace);
+        }
+        if (indicatorDates.length) {
+            traces.push(indicatorTrace);
+        }
+
+        const layout = {
+            title: {
+                text: "Macroeconomic Sentiment vs Exchange Rate Volatility",
+                x: 0,
+                xanchor: "left"
+            },
+            margin: {t: 64, r: 120, b: 76, l: 64},
+            xaxis: {title: "Date", domain: [0, 0.84]},
+            yaxis: {
+                title: "Sentiment Score",
+                range: [-1, 1],
+                zeroline: true,
+                gridcolor: "#e7edf5"
+            },
+            yaxis2: {
+                title: "Repo Rate (%)",
+                overlaying: "y",
+                side: "right",
+                anchor: "x",
+                range: [
+                    Math.min(...policyRates.filter(rate => rate !== null), 5) - 0.25,
+                    Math.max(...policyRates.filter(rate => rate !== null), 6) + 0.25
+                ],
+                showgrid: false,
+                rangemode: "normal"
+            },
+            yaxis3: {
+                title: "USD-INR Vol (%)",
+                overlaying: "y",
+                anchor: "free",
+                side: "right",
+                position: 0.94,
+                visible: true,
+                showgrid: false
+            },
+            legend: {orientation: "h", y: -0.18},
+            hovermode: "x unified",
+            paper_bgcolor: "#ffffff",
+            plot_bgcolor: "#ffffff",
+            font: {family: "Arial, Helvetica, sans-serif", color: "#1f2937"}
+        };
+
+        Plotly.newPlot("correlationChart", traces, layout, {responsive: true});
+    }
+</script>
+</body>
+</html>
