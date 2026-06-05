@@ -1,3 +1,5 @@
+![Django](https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 # 📊 Macro-Sentiment Dashboard
 
 This Django-powered web application analyzes macroeconomic policy documents using AI and visualizes the resulting sentiment against key economic indicators.
