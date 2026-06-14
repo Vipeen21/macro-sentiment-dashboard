@@ -57,7 +57,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
-    "django.contrib.staticfiles", 
+    "django.contrib.staticfiles",
     "macro_sentiment",
 ]
 
@@ -143,10 +143,20 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GOOGLE_GENAI_CHAT_MODEL = os.environ.get("GOOGLE_GENAI_CHAT_MODEL", "gemini-2.5-flash")
+RBI_POLICY_URL = os.environ.get("RBI_POLICY_URL", "")
+RBI_REFRESH_ON_REQUEST = (
+    os.environ.get("RBI_REFRESH_ON_REQUEST", "True").lower() == "true"
+)
 
-SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False").lower() == "true"
-SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SESSION_COOKIE_SECURE", "False").lower() == "true"
-CSRF_COOKIE_SECURE = os.environ.get("DJANGO_CSRF_COOKIE_SECURE", "False").lower() == "true"
+SECURE_SSL_REDIRECT = (
+    os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False").lower() == "true"
+)
+SESSION_COOKIE_SECURE = (
+    os.environ.get("DJANGO_SESSION_COOKIE_SECURE", "False").lower() == "true"
+)
+CSRF_COOKIE_SECURE = (
+    os.environ.get("DJANGO_CSRF_COOKIE_SECURE", "False").lower() == "true"
+)
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = (
     os.environ.get("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "False").lower() == "true"

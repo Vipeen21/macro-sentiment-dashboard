@@ -5,4 +5,5 @@ langchain-google-genai==4.2.2
 pgvector==0.4.2
 psycopg2-binary==2.9.12
 requests==2.32.4
+certifi==2025.6.15
 numpy==1.26.4

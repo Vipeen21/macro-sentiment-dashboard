@@ -47,13 +47,24 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         doc_type = PolicyDocument.DocumentType.RBI_MONETARY_POLICY
-        latest_date = MPC_SERIES[-1][0]
+        latest_seed_date = timezone.make_aware(
+            datetime.strptime(MPC_SERIES[-1][0], "%Y-%m-%d")
+        )
+        live_latest = (
+            PolicyDocument.objects.filter(
+                document_type=doc_type,
+                is_latest=True,
+                published_date__gt=latest_seed_date,
+            )
+            .order_by("-published_date")
+            .first()
+        )
         policy_dates = set()
 
         for date, meeting, repo_rate, score, label, impact, volatility in MPC_SERIES:
             published_date = timezone.make_aware(datetime.strptime(date, "%Y-%m-%d"))
             policy_dates.add(published_date.date())
-            is_latest = date == latest_date
+            is_latest = live_latest is None and published_date == latest_seed_date
             title = f"Minutes of the Monetary Policy Committee Meeting, {meeting}"
             content = (
                 f"Date : {published_date.strftime('%b %d, %Y')}\n"
@@ -117,9 +128,18 @@ class Command(BaseCommand):
             if indicator.timestamp.date() not in policy_dates:
                 indicator.delete()
 
-        PolicyDocument.objects.filter(document_type=doc_type).exclude(
-            title__in=[f"Minutes of the Monetary Policy Committee Meeting, {row[1]}" for row in MPC_SERIES]
-        ).update(is_latest=False)
+        if live_latest:
+            PolicyDocument.objects.filter(document_type=doc_type).exclude(
+                pk=live_latest.pk
+            ).update(is_latest=False)
+        else:
+            seeded_titles = [
+                f"Minutes of the Monetary Policy Committee Meeting, {row[1]}"
+                for row in MPC_SERIES
+            ]
+            PolicyDocument.objects.filter(document_type=doc_type).exclude(
+                title__in=seeded_titles
+            ).update(is_latest=False)
 
         self.stdout.write(
             self.style.SUCCESS(

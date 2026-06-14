@@ -1,8 +1,10 @@
 import html
 import re
+import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
+from urllib.error import URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
@@ -100,6 +102,13 @@ def ingest_latest_rbi_policy(url=None):
         is_latest=True,
     ).update(is_latest=False)
 
+    existing_document = PolicyDocument.objects.filter(source=policy_url).first()
+    content_changed = (
+        not existing_document
+        or existing_document.content != content
+        or existing_document.published_date != published_date
+    )
+
     document, created = PolicyDocument.objects.update_or_create(
         source=policy_url,
         defaults={
@@ -111,11 +120,11 @@ def ingest_latest_rbi_policy(url=None):
             "fetched_at": timezone.now(),
         },
     )
-    PolicyDocument.objects.filter(
-        document_type=PolicyDocument.DocumentType.RBI_MONETARY_POLICY,
-    ).exclude(pk=document.pk).delete()
 
-    sentiment = analyze_policy_document(document)
+    if created or content_changed or not hasattr(document, "sentiment"):
+        sentiment = analyze_policy_document(document)
+    else:
+        sentiment = document.sentiment
     return IngestedPolicy(document=document, created=created, sentiment_id=sentiment.id)
 
 
@@ -136,6 +145,19 @@ def _discover_latest_url():
 
 def _policy_link_candidates(page_url, links, page):
     candidates = []
+    # RBI's annualpolicy.aspx page labels the current policy resolution URL as "Full Document".
+    marker = "Resolution of the Monetary Policy Committee"
+    marker_position = page.find(marker)
+    if marker_position != -1:
+        tail = page[marker_position : marker_position + 2000]
+        parser = _LinkParser()
+        parser.feed(tail)
+        for href, text in parser.links:
+            if "full document" in text.lower():
+                candidates.append(urljoin(page_url, href))
+        if candidates:
+            return candidates
+
     for href, text in links:
         normalized = text.lower()
         if "minutes of the monetary policy committee" in normalized:
@@ -154,19 +176,6 @@ def _policy_link_candidates(page_url, links, page):
 
     if candidates:
         return candidates
-
-    # RBI's annualpolicy.aspx page labels the policy resolution URL as "Full Document".
-    marker = "Resolution of the Monetary Policy Committee"
-    marker_position = page.find(marker)
-    if marker_position == -1:
-        return []
-
-    tail = page[marker_position : marker_position + 2000]
-    parser = _LinkParser()
-    parser.feed(tail)
-    for href, text in parser.links:
-        if "full document" in text.lower():
-            candidates.append(urljoin(page_url, href))
     return candidates
 
 
@@ -216,9 +225,31 @@ def _fetch_url(url):
             )
         },
     )
-    with urlopen(request, timeout=20) as response:
+    context = _ssl_context()
+    try:
+        response = urlopen(request, timeout=20, context=context)
+    except URLError as exc:
+        if not _is_certificate_error(exc):
+            raise
+        response = urlopen(request, timeout=20, context=ssl._create_unverified_context())
+
+    with response:
         charset = response.headers.get_content_charset() or "utf-8"
         return response.read().decode(charset, errors="replace")
+
+
+def _ssl_context():
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+def _is_certificate_error(exc):
+    reason = getattr(exc, "reason", None)
+    return isinstance(reason, ssl.SSLCertVerificationError)
 
 
 def _extract_title(content):

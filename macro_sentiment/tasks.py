@@ -87,9 +87,16 @@ Text:
 """.strip()
 
     try:
+        if not getattr(settings, "GOOGLE_API_KEY", ""):
+            raise RuntimeError("GOOGLE_API_KEY is not configured.")
+
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0)
+        llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=0,
+            google_api_key=settings.GOOGLE_API_KEY,
+        )
         payload = _extract_json(_response_text(llm.invoke(prompt)))
     except Exception:
         payload = _fallback_analysis(doc.content)

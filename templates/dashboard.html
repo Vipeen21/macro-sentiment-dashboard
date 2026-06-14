@@ -194,6 +194,11 @@
         {% else %}
             <div class="empty-state" style="display:block;">No latest RBI policy document has been ingested yet.</div>
         {% endif %}
+        {% if refresh_error %}
+            <div class="empty-state" style="display:block; margin-top:12px;">
+                Latest RBI refresh failed: {{ refresh_error }}
+            </div>
+        {% endif %}
     </section>
 
     <section class="chart-shell">

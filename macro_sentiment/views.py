@@ -2,11 +2,14 @@ import json
 import re
 from datetime import timedelta
 
+from django.conf import settings
+from django.db.models import Avg
 from django.shortcuts import render
 from django.utils import timezone
 
+from .ingestion import ingest_latest_rbi_policy
 from .logic import get_policy_answer_with_meta
-from .models import EconomicIndicator, PolicyDocument
+from .models import EconomicIndicator, PolicyDocument, SentimentResult
 
 
 def _extract_policy_rate(text):
@@ -21,7 +24,19 @@ def _extract_policy_rate(text):
     return None
 
 
+def _refresh_latest_rbi_policy():
+    if not getattr(settings, "RBI_REFRESH_ON_REQUEST", True):
+        return ""
+
+    try:
+        ingest_latest_rbi_policy()
+    except Exception as exc:
+        return str(exc)
+    return ""
+
+
 def dashboard_view(request):
+    refresh_error = _refresh_latest_rbi_policy()
     five_years_ago = timezone.now() - timedelta(days=365 * 5)
     policy_documents = list(
         PolicyDocument.objects.filter(
@@ -33,6 +48,13 @@ def dashboard_view(request):
         .order_by("published_date")
     )
 
+    sentiment_data = list(
+        SentimentResult.objects.filter(document__in=policy_documents)
+        .values("document__published_date__date")
+        .annotate(avg_sentiment=Avg("sentiment_score"))
+        .order_by("document__published_date__date")
+    )
+
     economic_data = list(
         EconomicIndicator.objects.filter(
             name="Exchange Rate Volatility",
@@ -42,9 +64,16 @@ def dashboard_view(request):
         .values("timestamp", "value", "unit")
     )
 
-    sentiment_dates = [doc.published_date.date().isoformat() for doc in policy_documents]
+    sentiment_dates = [
+        str(row["document__published_date__date"]) for row in sentiment_data
+    ]
     sentiment_scores = [
-        round(float(doc.sentiment.sentiment_score), 4) for doc in policy_documents
+        (
+            round(float(row["avg_sentiment"]), 4)
+            if row["avg_sentiment"] is not None
+            else None
+        )
+        for row in sentiment_data
     ]
     policy_rates = [_extract_policy_rate(doc.content) for doc in policy_documents]
     meeting_titles = [
@@ -66,6 +95,7 @@ def dashboard_view(request):
         .order_by("-published_date")
         .first()
     )
+
     answer = ""
     answer_source_label = ""
     answer_source_type = ""
@@ -90,6 +120,7 @@ def dashboard_view(request):
         "indicator_unit": indicator_unit or "value",
         "indicator_unit_json": json.dumps(indicator_unit or "value"),
         "latest_document": latest_document,
+        "refresh_error": refresh_error,
         "question": question,
         "answer": answer,
         "answer_source_label": answer_source_label,
